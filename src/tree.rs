@@ -30,10 +30,6 @@ pub enum PathNode {
 
 #[derive(Debug)]
 pub enum Node {
-    Group {
-        opacity: Opacity,
-        children: Box<[Node]>,
-    },
     Path(PathNode),
     Image(Image),
 }
@@ -86,18 +82,6 @@ impl PColor for Paint {
 }
 fn convert(node: usvg::Node, to: &mut Vec<Node>) {
     match &*node.clone().borrow() {
-        usvg::NodeKind::Group(g) => {
-            let mut children = vec![];
-            collect(node, &mut children);
-            let mut children = children.into_boxed_slice();
-            for child in &mut *children {
-                child.transform(g.transform);
-            }
-            to.push(Node::Group {
-                opacity: g.opacity,
-                children,
-            });
-        }
         usvg::NodeKind::Path(usvg::Path {
             stroke:
                 Some(usvg::Stroke {
@@ -168,6 +152,7 @@ fn convert(node: usvg::Node, to: &mut Vec<Node>) {
                 path: pointify(path, *transform),
             }));
         }
+        usvg::NodeKind::Group(_) => {}
         usvg::NodeKind::Image(_) => todo!(),
         usvg::NodeKind::Text(_) => unimplemented!(),
     }

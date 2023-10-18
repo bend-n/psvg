@@ -50,13 +50,6 @@ fn render(node: &Node, img: &mut Image<Box<[u8]>, 4>) {
             ..
             // TODO: stroek
         }) => img.points(&point(path), color.col(*opacity)),
-        Node::Group {
-            ..
-        } => {
-            // for child in &**children {
-            //     render(child, img);
-            // }
-        }
         t => unimplemented!("{t:?}"),
     }
 }
