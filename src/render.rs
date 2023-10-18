@@ -1,6 +1,6 @@
 use crate::tree::{Node, PathNode, Tree};
 use fimg::Image;
-use tiny_skia_path::{NormalizedF32, Path, Point};
+use tiny_skia_path::{NormalizedF32, Point};
 use usvg::Color;
 
 impl Tree {
@@ -24,13 +24,13 @@ impl Col for Color {
     }
 }
 
-fn point(p: &Path) -> Vec<(i32, i32)> {
+fn point(p: &Box<[Point]>) -> Vec<(i32, i32)> {
     let mut points = Vec::with_capacity(p.len() + 1);
     let r = |p: Point| (p.x.round() as i32, p.y.round() as i32);
-    for &point in p.points() {
+    for &point in &**p {
         points.push(r(point));
     }
-    points.push(r(*p.points().first().unwrap()));
+    points.push(r(*p.first().unwrap()));
     points
 }
 

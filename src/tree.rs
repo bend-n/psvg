@@ -1,6 +1,7 @@
 use anyhow::Result;
-use tiny_skia_path::{NonZeroPositiveF32, NormalizedF32, Path, Rect, Size, Transform};
-use usvg::{BBox, Color, Fill, Image, Opacity, Options, Paint, TreeParsing};
+use std::rc::Rc;
+use tiny_skia_path::{NonZeroPositiveF32, NormalizedF32, Path, Point, Size, Transform};
+use usvg::{Color, Fill, Image, Opacity, Options, Paint, TreeParsing};
 
 #[derive(Debug)]
 pub struct Tree {
@@ -15,7 +16,7 @@ pub enum PathNode {
     Fill {
         color: Color,
         opacity: Opacity,
-        path: Path,
+        path: Box<[Point]>,
     },
     Stroke {
         color: Color,
@@ -23,7 +24,7 @@ pub enum PathNode {
         stroke_color: Color,
         stroke_opacity: Opacity,
         stroke: NonZeroPositiveF32,
-        path: Path,
+        path: Box<[Point]>,
     },
 }
 
@@ -31,18 +32,26 @@ pub enum PathNode {
 pub enum Node {
     Group {
         opacity: Opacity,
-        bbox: BBox,
         children: Box<[Node]>,
     },
     Path(PathNode),
     Image(Image),
 }
 
+fn pointify(p: &Rc<Path>, t: Transform) -> Box<[Point]> {
+    let mut p: Box<[Point]> = p.points().into();
+    t.map_points(&mut p);
+    p
+}
+
 impl Node {
     fn transform(&mut self, t: Transform) {
         match self {
             Self::Path(PathNode::Fill { path, .. } | PathNode::Stroke { path, .. }) => {
-                *path = path.clone().transform(t).unwrap(); // idc
+                if t.is_identity() {
+                    return;
+                }
+                t.map_points(path);
             }
             // TODO
             _ => {}
@@ -75,21 +84,19 @@ impl PColor for Paint {
         }
     }
 }
-fn convert(node: usvg::Node, to: &mut Vec<Node>) -> Option<Rect> {
+fn convert(node: usvg::Node, to: &mut Vec<Node>) {
     match &*node.clone().borrow() {
         usvg::NodeKind::Group(g) => {
             let mut children = vec![];
-            let bbox = collect(node, &mut children);
+            collect(node, &mut children);
             let mut children = children.into_boxed_slice();
             for child in &mut *children {
                 child.transform(g.transform);
             }
             to.push(Node::Group {
                 opacity: g.opacity,
-                bbox,
                 children,
             });
-            bbox.to_rect()
         }
         usvg::NodeKind::Path(usvg::Path {
             stroke:
@@ -110,9 +117,8 @@ fn convert(node: usvg::Node, to: &mut Vec<Node>) -> Option<Rect> {
                 stroke: *stroke,
                 stroke_opacity: *stroke_opacity,
                 stroke_color: stroke_paint.col(),
-                path: (**path).clone().transform(*transform).unwrap(),
+                path: pointify(path, *transform),
             }));
-            Some(path.bounds())
         }
         usvg::NodeKind::Path(usvg::Path {
             stroke:
@@ -133,9 +139,8 @@ fn convert(node: usvg::Node, to: &mut Vec<Node>) -> Option<Rect> {
                 stroke: *stroke,
                 stroke_opacity: *stroke_opacity,
                 stroke_color: stroke_paint.col(),
-                path: (**path).clone().transform(*transform).unwrap(),
+                path: pointify(path, *transform),
             }));
-            Some(path.bounds())
         }
         usvg::NodeKind::Path(usvg::Path {
             transform,
@@ -147,9 +152,8 @@ fn convert(node: usvg::Node, to: &mut Vec<Node>) -> Option<Rect> {
             to.push(Node::Path(PathNode::Fill {
                 color: paint.col(),
                 opacity: *opacity,
-                path: (**path).clone().transform(*transform).unwrap(),
+                path: pointify(path, *transform),
             }));
-            Some(path.bounds())
         }
         usvg::NodeKind::Path(usvg::Path {
             transform,
@@ -161,22 +165,19 @@ fn convert(node: usvg::Node, to: &mut Vec<Node>) -> Option<Rect> {
             to.push(Node::Path(PathNode::Fill {
                 color: Color::black(),
                 opacity: NormalizedF32::new(0.0).unwrap(),
-                path: (**path).clone().transform(*transform).unwrap(),
+                path: pointify(path, *transform),
             }));
-            Some(path.bounds())
         }
         usvg::NodeKind::Image(_) => todo!(),
         usvg::NodeKind::Text(_) => unimplemented!(),
     }
 }
 
-fn collect(node: usvg::Node, to: &mut Vec<Node>) -> BBox {
-    let mut bbox = BBox::default();
+fn collect(node: usvg::Node, to: &mut Vec<Node>) {
     for child in node.children() {
-        bbox = bbox.expand(collect(child.clone(), to));
-        bbox = bbox.expand(convert(child, to).map_or(BBox::default(), BBox::from));
+        collect(child.clone(), to);
+        convert(child, to);
     }
-    bbox
 }
 
 impl Tree {
