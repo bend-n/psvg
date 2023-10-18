@@ -1,4 +1,4 @@
-use crate::tree::{Node, PathNode, Tree};
+use crate::tree::{Node, Tree};
 use fimg::Image;
 use tiny_skia_path::{NormalizedF32, Point};
 use usvg::Color;
@@ -6,6 +6,7 @@ use usvg::Color;
 impl Tree {
     #[must_use]
     pub fn render(&self) -> Image<Box<[u8]>, 4> {
+        log::trace!("rendering {self:#?}");
         let mut canvas =
             Image::alloc(self.width.round() as u32, self.height.round() as u32).boxed();
         for node in &*self.children {
@@ -36,20 +37,19 @@ fn point(p: &Box<[Point]>) -> Vec<(i32, i32)> {
 
 fn render(node: &Node, img: &mut Image<Box<[u8]>, 4>) {
     match node {
-        Node::Path(PathNode::Fill {
+        Node::Fill {
             color,
             opacity,
             path,
-        }) => {
+        } => {
             img.points(&point(path), color.col(*opacity));
         }
-        Node::Path(PathNode::Stroke {
+        Node::Stroke {
             color,
             opacity,
             path,
             ..
             // TODO: stroek
-        }) => img.points(&point(path), color.col(*opacity)),
-        t => unimplemented!("{t:?}"),
+        } => img.points(&point(path), color.col(*opacity)),
     }
 }
